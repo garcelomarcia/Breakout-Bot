@@ -2,6 +2,7 @@ import json, config
 from flask import Flask, request, jsonify
 from binance.client import Client
 from binance.enums import *
+import time
 app = Flask(__name__)
 import pandas as pd
 df = pd.read_excel("Book3.xlsx")
@@ -18,31 +19,30 @@ for key in exchange_info:
         if int(len(key['filters'][1]['stepSize'])) >=3:
             table[key["symbol"]]['Order Decimals'] = int(len(key['filters'][1]['stepSize'])-2)
         else:
-            table[key["symbol"]]['Order Decimals'] = 0
+            table[key["symbol"]]['Order Decimals'] = 0   
 
-
-def entry_order(side,quantity,symbol,tp,opp_side):
+def entry_order(side, quantity,symbol,price, opp_side, tp,sl):
     try:
-        print(f"sending order: Market {side}{quantity}{symbol}")
-        order = client.futures_create_order(symbol=symbol, side=side, type='MARKET', quantity=quantity)
-        print(f"sending order: Limit {opp_side} {quantity} on {symbol} @{tp}")
-        tp_order = client.futures_create_order(symbol=symbol, side=opp_side, type='LIMIT', quantity=quantity, price=tp,timeInForce="GTC")
-        print(order)    
+        client.futures_cancel_all_open_orders(symbol=symbol)    
+        print(f"sending order: Stop Market Order {side}{quantity}{symbol} @{price}")
+        order = client.futures_create_order(symbol=symbol, side=side, type='STOP_MARKET', quantity=quantity, stopPrice=price)
+        time.sleep(1)        
+        order_executed = False
+        while order_executed == False:
+            position_info=client.futures_position_information()
+            for key in position_info:
+                if (key['symbol'] == symbol) and float(key['positionAmt']) != 0.0:            
+                    order_executed = True
+                    print(f"sending order: Take Profit Order {opp_side}{quantity}{symbol} @{tp}")
+                    tp_order = client.futures_create_order(symbol=symbol, side=opp_side, type='LIMIT', quantity=quantity, price=tp,timeInForce="GTC")
+                    sl_order = client.futures_create_order(symbol=symbol, side=opp_side, type='STOP_MARKET', quantity=quantity, stopPrice=sl,timeInForce="GTC")
+                    break
+                else:
+                    order_executed = False
     except Exception as e:
         print("an exception occured - {}".format(e))
-        return False
-    
-    return order,tp_order
-
-def exit_order(symbol,side):
-    quantity = float(client.futures_position_information(symbol=symbol)[0].get('positionAmt'))
-    if (quantity > 0) or (quantity < 0):
-        order = client.futures_create_order(symbol=symbol, side=side, type='MARKET', quantity=quantity)
-        close = client.futures_cancel_all_open_orders(symbol=symbol)
-    else:
-        return False
-        
-    return order,close
+        return False 
+    return order,tp_order,sl_order
 
 @app.route("/webhook", methods=['POST'])
 def webhook():
@@ -56,50 +56,37 @@ def webhook():
     for check_balance in acc_balance:
         if check_balance["asset"] == "USDT":
             usdt_balance = float(check_balance["balance"])
-    symbol = data['ticker'].split('PERP')[0]
+    symbol = data['ticker'].upper()
     quantity_round = table[f"{symbol}"]['Order Decimals']
     price_round = table[f"{symbol}"]['Price Decimals']
-    side = data['strategy']['order_action'].upper()
-    prev_position = data['strategy']['prev_market_position']
+    side = data['order_action'].upper()
     rank = float(df.at[symbol+"PERP","Rank"])
-    quantity = round((usdt_balance*rank)/(data['bar']['close']),quantity_round)
-    price = float(data['strategy']['order_price'])
-    rr = float(df.at[symbol+"PERP","R:R"])
+    price = float(data['order_price'])
+    quantity = round(((usdt_balance/100)*rank)/price,quantity_round)    
+    sl = float(data['sl'])
+    tp = float(data['tp'])
     if side == "BUY":
-        sl = price * (1-(float(df.at[symbol+"PERP","SL %"])/100))
-        tp = round((price + (price-sl) * rr),price_round)
         opp_side = "SELL"
-    elif side =="SELL":
-        sl = price * (1+(float(df.at[symbol+"PERP","SL %"])/100))
-        tp = round((price - (sl-price) * rr),price_round)
+    else:
         opp_side = "BUY"
-    
-    if prev_position == "flat":
-        new_order = entry_order(side, quantity, symbol,tp,opp_side)
-        if new_order:
-            return {
-                "code": "success",
-                "message": "create order executed"
-            }
-        else:
-            return {
-                "code": "error",
-                "message": "create order failed"
-            }
-    elif prev_position =="long" or "short":
-        close_order = exit_order(symbol,side)  
-        if close_order:
-            return {
-                "code": "success",
-                "message": "close order executed"
-            }
-        else:
-            return {
-                "code": "error",
-                "message": "close order failed"
-            }
-    
+    new_order = entry_order(side, quantity,symbol,price, opp_side, tp,sl)
+    if new_order:
+        return {
+            "code": "success",
+            "message": "stop order created"
+        }
+    else:
+        return {
+            "code": "error",
+            "message": "stop order failed"
+        }
+        
+        
         
 @app.route("/")
 def hello_world():
     return "<p>Hello, World!</p>"
+
+
+if __name__ == "__main__":
+    app.run(host='127.0.0.1', port=5000, debug=True, threaded=True)
