@@ -58,11 +58,10 @@ def webhook():
             usdt_balance = float(check_balance["balance"])
     symbol = data['ticker'].upper()
     quantity_round = table[f"{symbol}"]['Order Decimals']
-    price_round = table[f"{symbol}"]['Price Decimals']
     side = data['order_action'].upper()
     rank = float(df.at[symbol+"PERP","Rank"])
     price = float(data['order_price'])
-    quantity = round(((usdt_balance/100)*rank)/price,quantity_round)    
+    quantity = round((usdt_balance*rank)/price,quantity_round)    
     sl = float(data['sl'])
     tp = float(data['tp'])
     if side == "BUY":
