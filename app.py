@@ -29,17 +29,15 @@ def entry_order(side, quantity,symbol,price, opp_side, tp,sl):
         time.sleep(1)        
         order_executed = False
         while order_executed == False:
-            position_info=client.futures_position_information()
-            for key in position_info:
-                if (key['symbol'] == symbol) and float(key['positionAmt']) != 0.0:            
-                    order_executed = True
-                    print(f"sending order: Take Profit Order {opp_side}{quantity}{symbol} @{tp}")
-                    tp_order = client.futures_create_order(symbol=symbol, side=opp_side, type='LIMIT', quantity=quantity, price=tp, reduceOnly=True, timeInForce="GTC")
-                    print(f"sending order: Stop Loss {opp_side}{quantity}{symbol} @{sl}")
-                    sl_order = client.futures_create_order(symbol=symbol, side=opp_side, type='STOP_MARKET', quantity=quantity, stopPrice=sl, reduceOnly=True, timeInForce="GTC")
-                    break
-                else:
-                    order_executed = False
+            if float(client.futures_position_information(symbol=symbol)[0]['positionAmt']) != 0.0:            
+                order_executed = True
+                print(f"sending order: Take Profit Order {opp_side}{quantity}{symbol} @{tp}")
+                tp_order = client.futures_create_order(symbol=symbol, side=opp_side, type='LIMIT', quantity=quantity, price=tp, reduceOnly=True, timeInForce="GTC")
+                print(f"sending order: Stop Loss {opp_side}{quantity}{symbol} @{sl}")
+                sl_order = client.futures_create_order(symbol=symbol, side=opp_side, type='STOP_MARKET', quantity=quantity, stopPrice=sl, reduceOnly=True, timeInForce="GTC")
+                break
+            else:
+                order_executed = False
     except Exception as e:
         print("an exception occured - {}".format(e))            
         print(f"Order sent at Market Price {side}{quantity}{symbol}")
@@ -48,8 +46,7 @@ def entry_order(side, quantity,symbol,price, opp_side, tp,sl):
         tp_order = client.futures_create_order(symbol=symbol, side=opp_side, type='LIMIT', quantity=quantity, price=tp, reduceOnly=True, timeInForce="GTC")
         print(f"sending order: Stop Loss {opp_side}{quantity}{symbol} @{sl}")
         sl_order = client.futures_create_order(symbol=symbol, side=opp_side, type='STOP_MARKET', quantity=quantity, stopPrice=sl, reduceOnly=True, timeInForce="GTC")
-
-        return False
+        
     return order,tp_order,sl_order
 
 @app.route("/webhook", methods=['POST'])
@@ -77,8 +74,10 @@ def webhook():
         opp_side = "SELL"
     else:
         opp_side = "BUY"
-    
-    new_order = entry_order(side, quantity,symbol,price, opp_side, tp,sl)
+    if float(client.futures_position_information(symbol=symbol)[0]['positionAmt']) == 0.0:
+        new_order = entry_order(side, quantity,symbol,price, opp_side, tp,sl)
+    else:
+        new_order = False
     if new_order:
         return {
             "code": "success",
