@@ -47,7 +47,7 @@ def entry_order(side, quantity,symbol,price, opp_side, tp,sl):
         print(f"sending order: Stop Loss {opp_side}{quantity}{symbol} @{sl}")
         sl_order = client.futures_create_order(symbol=symbol, side=opp_side, type='STOP_MARKET', quantity=quantity, stopPrice=sl, reduceOnly=True, timeInForce="GTC")
         
-    return order,tp_order,sl_order
+    return order
 
 @app.route("/webhook", methods=['POST'])
 def webhook():
