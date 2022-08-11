@@ -30,11 +30,11 @@ def entry_order(side, quantity,symbol,price, opp_side, tp,sl):
         order_executed = False
         while order_executed == False:
             if float(client.futures_position_information(symbol=symbol)[0]['positionAmt']) != 0.0:            
-                order_executed = True
                 print(f"sending order: Take Profit Order {opp_side}{quantity}{symbol} @{tp}")
                 tp_order = client.futures_create_order(symbol=symbol, side=opp_side, type='LIMIT', quantity=quantity, price=tp, reduceOnly=True, timeInForce="GTC")
                 print(f"sending order: Stop Loss {opp_side}{quantity}{symbol} @{sl}")
                 sl_order = client.futures_create_order(symbol=symbol, side=opp_side, type='STOP_MARKET', quantity=quantity, stopPrice=sl, reduceOnly=True, timeInForce="GTC")
+                order_executed = True
                 break
             else:
                 order_executed = False
@@ -76,14 +76,13 @@ def webhook():
         opp_side = "BUY"
     if float(client.futures_position_information(symbol=symbol)[0]['positionAmt']) == 0.0:
         new_order = entry_order(side, quantity,symbol,price, opp_side, tp,sl)
+        if new_order:
+            return {
+                "code": "success",
+                "message": "stop order created"
+            }
     else:
-        new_order = False
-    if new_order:
-        return {
-            "code": "success",
-            "message": "stop order created"
-        }
-    else:
+        
         return {
             "code": "error",
             "message": "stop order failed"
