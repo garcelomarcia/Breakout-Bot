@@ -22,8 +22,8 @@ for key in exchange_info:
             table[key["symbol"]]['Order Decimals'] = 0   
 
 def entry_order(side, quantity,symbol,price, opp_side, tp,sl):
-    try:
-        client.futures_cancel_all_open_orders(symbol=symbol)    
+    client.futures_cancel_all_open_orders(symbol=symbol)
+    try:    
         print(f"sending order: Stop Market Order {side}{quantity}{symbol} @{price}")
         order = client.futures_create_order(symbol=symbol, side=side, type='STOP_MARKET', quantity=quantity, stopPrice=price)
         time.sleep(1)        
@@ -40,14 +40,9 @@ def entry_order(side, quantity,symbol,price, opp_side, tp,sl):
                 order_executed = False
     except Exception as e:
         print("an exception occured - {}".format(e))            
-        print(f"Order sent at Market Price {side}{quantity}{symbol}")
-        order = client.futures_create_order(symbol=symbol, side=side, type='MARKET', quantity=quantity)
-        print(f"sending order: Take Profit Order {opp_side}{quantity}{symbol} @{tp}")
-        tp_order = client.futures_create_order(symbol=symbol, side=opp_side, type='LIMIT', quantity=quantity, price=tp, reduceOnly=True, timeInForce="GTC")
-        print(f"sending order: Stop Loss {opp_side}{quantity}{symbol} @{sl}")
-        sl_order = client.futures_create_order(symbol=symbol, side=opp_side, type='STOP_MARKET', quantity=quantity, stopPrice=sl, reduceOnly=True, timeInForce="GTC")
+        return False
         
-    return order
+    return order,tp_order,sl
 
 @app.route("/webhook", methods=['POST'])
 def webhook():
