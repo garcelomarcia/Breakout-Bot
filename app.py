@@ -64,7 +64,7 @@ def webhook():
     side = data['order_action'].upper()
     rank = float(df.at[symbol+"PERP","Rank"])
     price = float(data['order_price'])
-    quantity = round(usdt_balance/price,quantity_round)    
+    quantity = round((usdt_balance*rank)/price,quantity_round)    
     sl = float(data['sl'])
     tp = float(data['tp'])
     if side == "BUY":
