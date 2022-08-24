@@ -23,7 +23,7 @@ for key in exchange_info:
 
 def entry_order(side, quantity,symbol,price, opp_side, tp,sl):
     if client.futures_get_open_orders(symbol=symbol):
-        return False
+        client.futures_cancel_all_open_orders(symbol=symbol)
         
     try:    
         print(f"sending order: Stop Market Order {side}{quantity}{symbol} @{price}")
@@ -43,6 +43,8 @@ def entry_order(side, quantity,symbol,price, opp_side, tp,sl):
             sl_order = client.futures_create_order(symbol=symbol, side=opp_side, type='STOP_MARKET', quantity=quantity, stopPrice=sl, reduceOnly=True, timeInForce="GTC")
             order_executed = True
             break
+        elif not client.futures_get_open_orders(symbol=symbol):
+            return False
         else:
             order_executed = False
         
