@@ -31,29 +31,34 @@ def entry_order(side, quantity,symbol,price, opp_side, tp,sl):
         print(f"sending order: Stop Market Order {side}{quantity}{symbol} @{price}")
         order = client.futures_create_order(symbol=symbol, side=side, type='STOP_MARKET', quantity=quantity, stopPrice=price)
         order_id = client.futures_get_open_orders(symbol=symbol)[0]['orderId']
+        open_order = True
+        while open_order == True:            
+            if client.futures_get_open_orders(symbol=symbol):
+                time.sleep(0.5)
+                open_order = True
+            else:
+                open_order = False
+        last_order_id = client.futures_get_all_orders(symbol=symbol)[-1]['orderId']
+        last_order_status = client.futures_get_all_orders(symbol=symbol)[-1]['status']
+        if order_id == last_order_id and last_order_status == "FILLED":
+            print(f"sending order: Take Profit Order {opp_side}{quantity}{symbol} @{tp}")
+            tp_order = client.futures_create_order(symbol=symbol, side=opp_side, type='LIMIT', quantity=quantity, price=tp, reduceOnly=True, timeInForce="GTC")
+            print(f"sending order: Stop Loss {opp_side}{quantity}{symbol} @{sl}")
+            sl_order = client.futures_create_order(symbol=symbol, side=opp_side, type='STOP_MARKET', quantity=quantity, stopPrice=sl, reduceOnly=True, timeInForce="GTC")
+        elif order_id == last_order_id and last_order_status == "CANCELED":
+            print("order canceled")
+            return False  
     except Exception as e:
         print("an exception occured - {}".format(e))
         print("sending order at market price")
         order = client.futures_create_order(symbol=symbol, side=side, type='MARKET', quantity=quantity)
-        order_id = client.futures_get_all_orders(symbol=symbol)[-1]['orderId']
-    
-    open_order = True
-    while open_order == True:            
-        if client.futures_get_open_orders(symbol=symbol):
-            time.sleep(0.5)
-            open_order = True
-        else:
-            open_order = False
-    last_order_id = client.futures_get_all_orders(symbol=symbol)[-1]['orderId']
-    last_order_status = client.futures_get_all_orders(symbol=symbol)[-1]['status']
-    if order_id == last_order_id and last_order_status == "FILLED":
+        time.sleep(0.5)
         print(f"sending order: Take Profit Order {opp_side}{quantity}{symbol} @{tp}")
         tp_order = client.futures_create_order(symbol=symbol, side=opp_side, type='LIMIT', quantity=quantity, price=tp, reduceOnly=True, timeInForce="GTC")
         print(f"sending order: Stop Loss {opp_side}{quantity}{symbol} @{sl}")
         sl_order = client.futures_create_order(symbol=symbol, side=opp_side, type='STOP_MARKET', quantity=quantity, stopPrice=sl, reduceOnly=True, timeInForce="GTC")
-    elif order_id == last_order_id and last_order_status == "CANCELED":
-        print("order canceled")
-        return False  
+    
+    
            
     return order,tp_order,sl_order
 
