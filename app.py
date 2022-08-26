@@ -30,11 +30,13 @@ def entry_order(side, quantity,symbol,price, opp_side, tp,sl):
     try:    
         print(f"sending order: Stop Market Order {side}{quantity}{symbol} @{price}")
         order = client.futures_create_order(symbol=symbol, side=side, type='STOP_MARKET', quantity=quantity, stopPrice=price)
+        order_id = client.futures_get_open_orders(symbol=symbol)[0]['orderId']
     except Exception as e:
         print("an exception occured - {}".format(e))
         print("sending order at market price")
         order = client.futures_create_order(symbol=symbol, side=side, type='MARKET', quantity=quantity)
-    order_id = client.futures_get_open_orders(symbol=symbol)[0]['orderId']
+        order_id = client.futures_get_all_orders(symbol=symbol)[-1]['orderId']
+    
     open_order = True
     while open_order == True:            
         if client.futures_get_open_orders(symbol=symbol):
@@ -42,7 +44,6 @@ def entry_order(side, quantity,symbol,price, opp_side, tp,sl):
             open_order = True
         else:
             open_order = False
-            break
     last_order_id = client.futures_get_all_orders(symbol=symbol)[-1]['orderId']
     last_order_status = client.futures_get_all_orders(symbol=symbol)[-1]['status']
     if order_id == last_order_id and last_order_status == "FILLED":
