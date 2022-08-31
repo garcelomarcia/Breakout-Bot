@@ -1,5 +1,5 @@
 import json, config
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, g
 from binance.client import Client
 from binance.enums import *
 import pandas as pd
@@ -22,11 +22,37 @@ for key in exchange_info:
         else:
             table[key["symbol"]]['Order Decimals'] = 0   
 
-def entry_order(side, quantity,symbol,price, opp_side, tp,sl):
-    if client.futures_get_open_orders(symbol=symbol):
+@app.route("/webhook", methods=['POST'])
+def webhook():
+    order = None
+    tp_order = None
+    sl_order = None
+    data = json.loads(request.data)
+    if data['passphrase'] != config.WEBHOOK_PASSPHRASE:
+        return {
+            "code": "error",
+            "message": "Invalid passhprase"
+        }
+    symbol = data['ticker'].upper()
+    if client.futures_get_open_orders(symbol=symbol) and client.futures_get_open_orders(symbol=symbol)[-1]['reduceOnly'] == "False":
         print("Cancelling previous order")
         client.futures_cancel_all_open_orders(symbol=symbol)
-        
+    acc_balance = client.futures_account_balance()
+    for check_balance in acc_balance:
+        if check_balance["asset"] == "USDT":
+            usdt_balance = float(check_balance["balance"])    
+    quantity_round = table[f"{symbol}"]['Order Decimals']
+    price_round = table[f"{symbol}"]['Price Decimals']
+    side = data['order_action'].upper()
+    rank = float(df.at[symbol+"PERP","Rank"])
+    price = float(data['order_price'])
+    quantity = round((usdt_balance*rank)/price,quantity_round)    
+    sl = float(data['sl'])
+    tp = float(data['tp'])
+    if side == "BUY":
+        opp_side = "SELL"
+    else:
+        opp_side = "BUY"
     try:    
         print(f"sending order: Stop Market Order {side}{quantity}{symbol} @{price}")
         order = client.futures_create_order(symbol=symbol, side=side, type='STOP_MARKET', quantity=quantity, stopPrice=price)
@@ -46,7 +72,6 @@ def entry_order(side, quantity,symbol,price, opp_side, tp,sl):
                     sl_order = client.futures_create_order(symbol=symbol, side=opp_side, type='STOP_MARKET', quantity=quantity, stopPrice=sl, reduceOnly=True, timeInForce="GTC")
                 elif order_id == last_order_id and last_order_status == "CANCELED":
                     print("order canceled")
-                    return False  
                 open_order = False
     except Exception as e:
         print("an exception occured - {}".format(e))
@@ -59,40 +84,8 @@ def entry_order(side, quantity,symbol,price, opp_side, tp,sl):
             print(f"sending order: Stop Loss {opp_side}{quantity}{symbol} @{sl}")
             sl_order = client.futures_create_order(symbol=symbol, side=opp_side, type='STOP_MARKET', quantity=quantity, stopPrice=sl, reduceOnly=True, timeInForce="GTC")
         else: 
-            return False
-    
-    
-           
-    return order,tp_order,sl_order
-
-@app.route("/webhook", methods=['POST'])
-def webhook():
-    data = json.loads(request.data)
-    if data['passphrase'] != config.WEBHOOK_PASSPHRASE:
-        return {
-            "code": "error",
-            "message": "Invalid passhprase"
-        }
-    acc_balance = client.futures_account_balance()
-    for check_balance in acc_balance:
-        if check_balance["asset"] == "USDT":
-            usdt_balance = float(check_balance["balance"])
-    symbol = data['ticker'].upper()
-    quantity_round = table[f"{symbol}"]['Order Decimals']
-    price_round = table[f"{symbol}"]['Price Decimals']
-    side = data['order_action'].upper()
-    rank = float(df.at[symbol+"PERP","Rank"])
-    price = float(data['order_price'])
-    quantity = round((usdt_balance*rank)/price,quantity_round)    
-    sl = float(data['sl'])
-    tp = float(data['tp'])
-    if side == "BUY":
-        opp_side = "SELL"
-    else:
-        opp_side = "BUY"
-    
-    new_order = entry_order(side, quantity,symbol,price, opp_side, tp,sl)
-    if new_order:
+            print("There was already an order")
+    if order and tp_order and sl_order:
         return {
             "code": "success",
             "message": "stop order created"
