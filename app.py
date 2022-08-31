@@ -1,5 +1,5 @@
 import json, config
-from flask import Flask, request, jsonify, g
+from flask import Flask, request, jsonify
 from binance.client import Client
 from binance.enums import *
 import pandas as pd
@@ -34,7 +34,7 @@ def webhook():
             "message": "Invalid passhprase"
         }
     symbol = data['ticker'].upper()
-    if client.futures_get_open_orders(symbol=symbol) and client.futures_get_open_orders(symbol=symbol)[-1]['reduceOnly'] == "False":
+    if client.futures_get_open_orders(symbol=symbol) and client.futures_get_open_orders(symbol=symbol)[0]['reduceOnly'] == "False":
         print("Cancelling previous order")
         client.futures_cancel_all_open_orders(symbol=symbol)
     acc_balance = client.futures_account_balance()
@@ -59,7 +59,7 @@ def webhook():
         order_id = client.futures_get_open_orders(symbol=symbol)[0]['orderId']
         open_order = True
         while open_order == True:            
-            if client.futures_get_open_orders(symbol=symbol):
+            if client.futures_get_open_orders(symbol=symbol)[0]['orderId'] == order_id:
                 time.sleep(0.5)
                 open_order = True
             else:                
