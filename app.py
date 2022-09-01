@@ -65,7 +65,7 @@ def webhook():
             order_id = client.futures_get_all_orders(symbol=symbol)[-1]['orderId']
         open_order = True
         while open_order == True:            
-            if float(client.futures_position_information(symbol=symbol)[0]['positionAmt']) == 0.0:
+            if client.futures_get_open_orders(symbol=symbol):
                 time.sleep(0.5)
                 open_order = True
             else:                
