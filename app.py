@@ -20,14 +20,43 @@ for key in exchange_info:
         if int(len(key['filters'][1]['stepSize'])) >=3:
             table[key["symbol"]]['Order Decimals'] = int(len(key['filters'][1]['stepSize'])-2)
         else:
-            table[key["symbol"]]['Order Decimals'] = 0   
+            table[key["symbol"]]['Order Decimals'] = 0
+
+
+def entry_order(side, quantity,symbol,price, opp_side, tp,sl):
+    if float(client.futures_position_information(symbol=symbol)[0]['positionAmt']) == 0.0:
+        client.futures_cancel_all_open_orders(symbol=symbol)
+    try:    
+        print(f"sending order: Stop Market Order {side}{quantity}{symbol} @{price}")
+        order = client.futures_create_order(symbol=symbol, side=side, type='STOP_MARKET', quantity=quantity, stopPrice=price)
+        time.sleep(1)        
+        order_executed = False
+        while order_executed == False:
+            if float(client.futures_position_information(symbol=symbol)[0]['positionAmt']) != 0.0:            
+                print(f"sending order: Take Profit Order {opp_side}{quantity}{symbol} @{tp}")
+                tp_order = client.futures_create_order(symbol=symbol, side=opp_side, type='LIMIT', quantity=quantity, price=tp, reduceOnly=True, timeInForce="GTC")
+                print(f"sending order: Stop Loss {opp_side}{quantity}{symbol} @{sl}")
+                sl_order = client.futures_create_order(symbol=symbol, side=opp_side, type='STOP_MARKET', quantity=quantity, stopPrice=sl, reduceOnly=True, timeInForce="GTC")
+                order_executed = True
+                break
+            else:
+                order_executed = False
+    except Exception as e:
+        print("an exception occured - {}".format(e))            
+        if not client.futures_get_open_orders(symbol=symbol) and float(client.futures_position_information(symbol=symbol)[0]['positionAmt']) == 0.0:
+            print("sending order at market price")
+            order = client.futures_create_order(symbol=symbol, side=side, type='MARKET', quantity=quantity)
+            time.sleep(0.5)
+            print(f"sending order: Take Profit Order {opp_side}{quantity}{symbol} @{tp}")
+            tp_order = client.futures_create_order(symbol=symbol, side=opp_side, type='LIMIT', quantity=quantity, price=tp, reduceOnly=True, timeInForce="GTC")
+            print(f"sending order: Stop Loss {opp_side}{quantity}{symbol} @{sl}")
+            sl_order = client.futures_create_order(symbol=symbol, side=opp_side, type='STOP_MARKET', quantity=quantity, stopPrice=sl, reduceOnly=True, timeInForce="GTC")
+
+        
+    return order,tp_order,sl_order
 
 @app.route("/webhook", methods=['POST'])
 def webhook():
-    order = None
-    tp_order = None
-    sl_order = None
-    order_id = None
     data = json.loads(request.data)
     if data['passphrase'] != config.WEBHOOK_PASSPHRASE:
         return {
@@ -43,7 +72,6 @@ def webhook():
         if check_balance["asset"] == "USDT":
             usdt_balance = float(check_balance["balance"])    
     quantity_round = table[f"{symbol}"]['Order Decimals']
-    price_round = table[f"{symbol}"]['Price Decimals']
     side = data['order_action'].upper()
     rank = float(df.at[symbol+"PERP","Rank"])
     price = float(data['order_price'])
@@ -54,33 +82,9 @@ def webhook():
         opp_side = "SELL"
     else:
         opp_side = "BUY"
-    
-    try:    
-        print(f"sending order: Stop Market Order {side}{quantity}{symbol} @{price}")
-        order = client.futures_create_order(symbol=symbol, side=side, type='STOP_MARKET', quantity=quantity, stopPrice=price)
-        while client.futures_get_open_orders(symbol=symbol):
-            time.sleep(0.5)
-        else:                
-            if float(client.futures_position_information(symbol=symbol)[0]['positionAmt']) != 0.0:
-                print(f"sending order: Take Profit Order {opp_side}{quantity}{symbol} @{tp}")
-                tp_order = client.futures_create_order(symbol=symbol, side=opp_side, type='LIMIT', quantity=quantity, price=tp, reduceOnly=True, timeInForce="GTC")
-                print(f"sending order: Stop Loss {opp_side}{quantity}{symbol} @{sl}")
-                sl_order = client.futures_create_order(symbol=symbol, side=opp_side, type='STOP_MARKET', quantity=quantity, stopPrice=sl, reduceOnly=True, timeInForce="GTC")
-            else:
-                print("order canceled")
-    except Exception as e:
-        print("an exception occured - {}".format(e))
-        if not client.futures_get_open_orders(symbol=symbol) and float(client.futures_position_information(symbol=symbol)[0]['positionAmt']) == 0.0:
-            print("sending order at market price")
-            order = client.futures_create_order(symbol=symbol, side=side, type='MARKET', quantity=quantity)
-            time.sleep(0.5)
-            print(f"sending order: Take Profit Order {opp_side}{quantity}{symbol} @{tp}")
-            tp_order = client.futures_create_order(symbol=symbol, side=opp_side, type='LIMIT', quantity=quantity, price=tp, reduceOnly=True, timeInForce="GTC")
-            print(f"sending order: Stop Loss {opp_side}{quantity}{symbol} @{sl}")
-            sl_order = client.futures_create_order(symbol=symbol, side=opp_side, type='STOP_MARKET', quantity=quantity, stopPrice=sl, reduceOnly=True, timeInForce="GTC")
-        else: 
-            print("There was already an order")
-    if order and tp_order and sl_order:
+
+    new_order = entry_order(side, quantity,symbol,price, opp_side, tp,sl)
+    if new_order:
         return {
             "code": "success",
             "message": "stop order created"
