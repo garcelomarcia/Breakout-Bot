@@ -47,10 +47,16 @@ def entry_order(side, quantity,symbol,price, opp_side, tp,sl):
             print("sending order at market price")
             order = client.futures_create_order(symbol=symbol, side=side, type='MARKET', quantity=quantity)
             time.sleep(0.5)
-            print(f"sending order: Take Profit Order {opp_side}{quantity}{symbol} @{tp}")
-            tp_order = client.futures_create_order(symbol=symbol, side=opp_side, type='LIMIT', quantity=quantity, price=tp, reduceOnly=True, timeInForce="GTC")
-            print(f"sending order: Stop Loss {opp_side}{quantity}{symbol} @{sl}")
-            sl_order = client.futures_create_order(symbol=symbol, side=opp_side, type='STOP_MARKET', quantity=quantity, stopPrice=sl, reduceOnly=True, timeInForce="GTC")
+            try:
+                print(f"sending order: Take Profit Order {opp_side}{quantity}{symbol} @{tp}")
+                tp_order = client.futures_create_order(symbol=symbol, side=opp_side, type='LIMIT', quantity=quantity, price=tp, reduceOnly=True, timeInForce="GTC")
+                print(f"sending order: Stop Loss {opp_side}{quantity}{symbol} @{sl}")
+                sl_order = client.futures_create_order(symbol=symbol, side=opp_side, type='STOP_MARKET', quantity=quantity, stopPrice=sl, reduceOnly=True, timeInForce="GTC")
+            except:
+                print(f"Exiting trade at Market Price on TP")
+                client.futures_create_order(symbol=symbol, side=opp_side, type='MARKET', quantity=quantity, reduceOnly=True)
+                return False
+                
 
         
     return order,tp_order,sl_order
