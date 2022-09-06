@@ -2,6 +2,7 @@ import json, config
 from flask import Flask, request, jsonify
 from binance.client import Client
 from binance.enums import *
+from binance.exceptions import BinanceAPIException
 import pandas as pd
 import time
 
@@ -41,9 +42,10 @@ def entry_order(side, quantity,symbol,price, opp_side, tp,sl):
                 break
             else:
                 order_executed = False
-    except Exception as e:
-        print("an exception occured - {}".format(e))            
-        if not client.futures_get_open_orders(symbol=symbol) and float(client.futures_position_information(symbol=symbol)[0]['positionAmt']) == 0.0:
+    except BinanceAPIException as e:
+        
+        # print("an exception occured - {}".format(e))    
+        if not client.futures_get_open_orders(symbol=symbol) and float(client.futures_position_information(symbol=symbol)[0]['positionAmt']) == 0.0 and str(e.message) == "Order would immediately trigger.":                        
             print("sending order at market price")
             order = client.futures_create_order(symbol=symbol, side=side, type='MARKET', quantity=quantity)
             time.sleep(0.5)
@@ -52,9 +54,10 @@ def entry_order(side, quantity,symbol,price, opp_side, tp,sl):
                 tp_order = client.futures_create_order(symbol=symbol, side=opp_side, type='LIMIT', quantity=quantity, price=tp, reduceOnly=True, timeInForce="GTC")
                 print(f"sending order: Stop Loss {opp_side}{quantity}{symbol} @{sl}")
                 sl_order = client.futures_create_order(symbol=symbol, side=opp_side, type='STOP_MARKET', quantity=quantity, stopPrice=sl, reduceOnly=True, timeInForce="GTC")
-            except:
-                print(f"Exiting trade at Market Price on TP")
-                client.futures_create_order(symbol=symbol, side=opp_side, type='MARKET', quantity=quantity, reduceOnly=True)
+            except BinanceAPIException as err:
+                if str(err.message) == "Order would immediately trigger.":
+                    print(f"Exiting trade at Market Price")
+                    client.futures_create_order(symbol=symbol, side=opp_side, type='MARKET', quantity=quantity, reduceOnly=True)
                 return False
                 
 
