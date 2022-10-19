@@ -7,13 +7,10 @@ import pandas as pd
 import time
 
 app = Flask(__name__)
-df = pd.read_excel("Book3.xlsx")
-symbols_list = df['Symbol'].to_list()
-symbols_list = [i.split("PERP")[0] for i in symbols_list]
-df = df.set_index('Symbol')
 client = Client(config.API_KEY, config.API_SECRET)
 table = {}
 exchange_info = client.futures_exchange_info().get('symbols')
+symbols_list = ['BTCUSDT', 'ETHUSDT']
 for key in exchange_info:
     if key["symbol"] in symbols_list:
         table[key["symbol"]] = {}
@@ -90,9 +87,8 @@ def webhook():
             usdt_balance = float(check_balance["balance"])    
     quantity_round = table[f"{symbol}"]['Order Decimals']
     side = data['order_action'].upper()
-    rank = float(df.at[symbol+"PERP","Rank"])
     price = float(data['order_price'])
-    quantity = round((usdt_balance*rank)/price,quantity_round)    
+    quantity = round((usdt_balance)/price,quantity_round)    
     sl = float(data['sl'])
     tp = float(data['tp'])
     if side == "BUY":
